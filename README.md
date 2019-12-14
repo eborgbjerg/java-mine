@@ -1,9 +1,9 @@
 
 # java-mine.pl
 
-*  Extract essential information 
+*  Extract essential information, particularly about enterprise style apps, 
+   e.g. Spring and Jakarta apps.
 
-*  Can Doxygen do the same?
 
 
 
