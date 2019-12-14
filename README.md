@@ -1,8 +1,9 @@
 
-# java-mine.pl
+# java-lint.pl
 
-*  Extract essential information, particularly about enterprise style apps, 
-   e.g. Spring and Jakarta apps.
+* Extract relevant patterns for further processing in a pipeline,
+  using grep, sed, awk, perl, etc.
+
 
 
 
