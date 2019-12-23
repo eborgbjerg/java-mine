@@ -1,0 +1,81 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+use v5.22;
+use autodie;
+use Getopt::Long;
+use File::Basename;
+
+
+my $project_root = undef;
+
+GetOptions ("r=s" => \$project_root,)  or die("Error in command line arguments\n");
+
+die "missing argument -r <project root>"  unless $project_root; 
+
+
+chdir $project_root;
+
+# todo update global on option
+
+my @rules = (
+  {  id            =>  1,
+     desc          => 'equals must always be tested', 
+     type          => 1,
+     target_symbol =>  'equals', 
+     use_type      => 'test',
+     use_context   => 'EqualsVerifier',
+  },
+);
+
+
+for my $rule (@rules) {
+
+    given($rule->{type}) {
+        when(1) {
+            my @target_classes;
+            my @code = `global -x $rule->{target_symbol}`;
+            for my $line (@code) {
+                my ($symbol, $line_no, $file_name) = split(/\s+/, $line);
+                my $class_name = substr((fileparse $file_name), 0, -5);
+                push @target_classes, $class_name;
+                #say "class $class_name defines $symbol on line $line_no in file $file_name";
+
+                my $ok = 0;
+                
+                # search for the use context...
+                my @use_contexts = `global -srx $rule->{use_context}`;
+                for my $use_context (@use_contexts) {
+                    if ($use_context =~ /$rule->{use_context}\.forClass\(${class_name}\.class\)/ ) {
+                        #say "class $class_name is tested: $use_context";
+                        $ok = 1;
+                    }
+                }
+
+                say "Broken rule: $class_name defines $symbol, not tested" unless $ok; 
+
+            }
+        }
+    }
+}
+
+
+
+
+=pod
+
+=head1 DESCRIPTION:
+
+ java-mine uses GNU Global as a backend.
+ Describe rules that the source code must satisfy.
+
+
+=head1 SYNOPSIS:  
+    ./java-mine -r project-dir
+
+=cut
+
+
+
+
