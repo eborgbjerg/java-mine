@@ -1,5 +1,4 @@
-#!/usr/bin/perl
-
+#!/usr/bin/perl -w
 use strict;
 use warnings;
 use v5.22;
@@ -7,25 +6,53 @@ use autodie;
 use Getopt::Long;
 use File::Basename;
 
-
 my $project_root = undef;
+my $verbose = 0;
+my $do_update = 0;
 
-GetOptions ("r=s" => \$project_root,)  or die("Error in command line arguments\n");
+Getopt::Long::Configure ('bundling');
 
-die "missing argument -r <project root>"  unless $project_root; 
+GetOptions 
+    ('r=s' => \$project_root,
+     'u'   => \$do_update,
+     'v'   => \$verbose, 
+    ) 
+        or die "Error in command line arguments\n";
 
+$project_root //= '.';
 
 chdir $project_root;
 
-# todo update global on option
+if ($do_update) {
+    say 'Updating index...';
+    `global -u`;
+    say 'Index updated.';
+}
+
+
+#
+# todo
+#      check for typical bug patterns, copy paste code etc.!?
+#      -- this could incorporate the scanner module from ./future/java-lint.pl
+#      require equals() + hashCode() when appearing in a HashMap
+#      require immutability for classes with equals()
+#      ...
+#
+
+
+# todo
+#      the rule database should live in its own module
+#      -- research SonarQube rule sources, FindBugs, PMD, etc.
 
 my @rules = (
-  {  id            =>  1,
-     desc          => 'equals must always be tested', 
-     type          => 1,
+  {  desc          =>  'equals must always be tested', 
+     type          =>  1,
      target_symbol =>  'equals', 
-     use_type      => 'test',
-     use_context   => 'EqualsVerifier',
+     use_context   =>  'EqualsVerifier',
+  },
+  {  desc          =>  'equals and hashCode must be defined together',
+     type          =>  2,
+     target_symbol =>  'equals:hashCode',
   },
 );
 
@@ -37,42 +64,95 @@ for my $rule (@rules) {
             my @target_classes;
             my @code = `global -x $rule->{target_symbol}`;
             for my $line (@code) {
-                my ($symbol, $line_no, $file_name) = split(/\s+/, $line);
-                my $class_name = substr((fileparse $file_name), 0, -5);
+                my ($symbol, $line_no, $file_name) = split /\s+/sxm, $line;
+                my $class_name = substr fileparse($file_name), 0, -5;
                 push @target_classes, $class_name;
-                #say "class $class_name defines $symbol on line $line_no in file $file_name";
+                
+                say "class $class_name defines $symbol on line $line_no in file $file_name" if ($verbose);
 
                 my $ok = 0;
                 
-                # search for the use context...
                 my @use_contexts = `global -srx $rule->{use_context}`;
                 for my $use_context (@use_contexts) {
-                    if ($use_context =~ /$rule->{use_context}\.forClass\(${class_name}\.class\)/ ) {
-                        #say "class $class_name is tested: $use_context";
+                    if ($use_context =~ /$rule->{use_context}\.forClass[(]${class_name}\.class[)]/sxm ) {
+                        say "class $class_name is ok: $use_context" if ($verbose);
                         $ok = 1;
                     }
                 }
 
-                say "Broken rule: $class_name defines $symbol, not tested" unless $ok; 
+                say "Broken rule: ${class_name}#${line_no} defines $symbol, violates: $rule->{desc}\n\t${file_name}" unless $ok; 
 
             }
+        }
+        when(2) {
+            say 'This rule is not implemented yet';
         }
     }
 }
 
 
-
+__END__
 
 =pod
 
-=head1 DESCRIPTION:
+=head1 NAME
+ 
+ java-mine
+
+=head1 DESCRIPTION
 
  java-mine uses GNU Global as a backend.
  Describe rules that the source code must satisfy.
 
+=head1 SYNOPSIS  
+    ./java-mine -r <project-dir>
 
-=head1 SYNOPSIS:  
-    ./java-mine -r project-dir
+
+=head1 USAGE
+
+  Maintain a collection of rules for source code content.
+  Report the source codes violations of the rules.
+
+
+=head1 DEPENDENCIES
+
+  Currently depends on GNU Global for symbol database.
+
+=head1 OPTIONS
+
+  -r <project-dir>
+  -u update symbol database
+  -v be verbose
+
+=head1 AUTHOR
+ 
+ Ejner Borgbjerg
+
+
+=head1 REQUIRED ARGUMENTS
+
+  None.
+
+
+=head1 EXIT STATUS
+
+  0 for successful execution, otherwise an error occurred.
+
+=head1 CONFIGURATION
+
+  sudo apt install global
+
+=head1 BUGS AND LIMITATIONS
+
+  github.com/eborgbjerg
+
+=head1 LICENSE AND COPYRIGHT
+
+  Perl Artistic License.
+
+=head1 DIAGNOSTICS
+ 
+  
 
 =cut
 
