@@ -3,6 +3,6 @@
 List<String> list = new ArrayList<String>();
     
 
-new HashMap<>();
+new HashMap<String>();
 
 
