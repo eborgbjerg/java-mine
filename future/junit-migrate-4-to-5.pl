@@ -35,19 +35,39 @@ say '=' x 80;
 say scalar keys %files_to_edit, " files in all.";
 
 =sub
-Make substitutions in one file.
+JUnit 4 -> JUnit 5 for one file.
 =cut
 sub work_on_lines {
     my ($filename, $lines) = @_;
     my $line_count = 0;
+    my $timeout = undef;
+    my $exception = undef;
+    my $method_body = '';
+
     open my $fh, '>', $filename if defined $commit;
     foreach my $line (@$lines) {
 
         my $line_before = $line;
         chomp $line_before;
 
+        if (defined($exception)) {
+            if ($line =~ / {0,4}}/ or $line =~ /\t}/) { # end of method
+                print $fh $method_body  if defined $commit;
+                print $fh "        });" if defined $commit;
+                undef $exception;
+                $method_body = '';
+            }
+            elsif ($line =~ /{$/) {
+                $method_body = "assertThrows(${exception}.class, () -> {\n";
+            }
+            else {
+                $method_body .= $line; # collect method body
+                $line = '';
+            }
+        }
+
         # fully qualified class names, annotation usage
-        if (   $line =~ s/ \Qorg.junit.BeforeClass\E            /org.junit.jupiter.api.BeforeAll/xo
+        elsif ($line =~ s/ \Qorg.junit.BeforeClass\E            /org.junit.jupiter.api.BeforeAll/xo
             or $line =~ s/ \Qorg.junit.Before\E                 /org.junit.jupiter.api.BeforeEach/xo
             or $line =~ s/ \Qorg.junit.AfterClass\E             /org.junit.jupiter.api.AfterAll/xo
             or $line =~ s/ \Qorg.junit.After\E                  /org.junit.jupiter.api.AfterEach/xo
@@ -63,27 +83,26 @@ sub work_on_lines {
             or $line =~ s/ (\@After) (\s+)                      /${1}Each${2}/xo  # avoid matching @AfterEach, @AfterAll
         ) {
             $line_count++;
-            print "$filename:\n\t$line_before -> $line";
+            print "$filename:\n\t$line_before -> $line" unless defined $commit;
         }
         elsif ($line =~ / \Qorg.junit\E /) {
             die "This line contains a package name that I can't handle: $line";
         }
 
         # @Test parameters
-        if ($line =~ / \s* \@Test (.*) /xo) {
+        elsif ($line =~ / \s* \@Test (.*) /xo) {
             my $rest = $1;
             unless ($rest =~ / \s* \/\/ /xo) { # line comment
                 if ($rest =~ / timeout \s* = (\d+) /xo) {
-                    print "$filename:\n\t$line_before: -> TIMEOUT($1)\n";
+                    print "$filename:\n\t$line_before: -> TIMEOUT($1)\n" unless defined $commit;
+                    $timeout = $1;
+                    $line = "    \@Test\n";
                 }
                 if ($rest =~ / expected \s* = (\w+) /xo) {
-                    print "$filename:\n\t$line_before: -> EXPECTED($1)\n";
+                    print "$filename:\n\t$line_before: -> EXPECTED($1)\n" unless defined $commit;
+                    $exception = $1;
+                    $line = "    \@Test\n";
                 }
-                # todo - comment out the parameters
-                # todo - read the test method body + wrap it
-                #   1) find the first '{'
-                #   2) find the '}' that is 4 spaces (or Tab) indented
-                #   3) wrap the found text in the relevant assertion
             }
         }
 
