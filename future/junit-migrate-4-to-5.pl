@@ -79,9 +79,10 @@ sub work_on_lines {
                 if ($rest =~ / expected \s* = (\w+) /xo) {
                     print "$filename:\n\t$line_before: -> EXPECTED($1)\n";
                 }
-                # todo  read the test method body + wrap it
+                # todo - comment out the parameters
+                # todo - read the test method body + wrap it
                 #   1) find the first '{'
-                #   2) find the '}' that is 4 spaces indented
+                #   2) find the '}' that is 4 spaces (or Tab) indented
                 #   3) wrap the found text in the relevant assertion
             }
         }
