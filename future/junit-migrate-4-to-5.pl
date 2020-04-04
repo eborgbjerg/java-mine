@@ -58,9 +58,9 @@ sub work_on_lines {
             or $line =~ s/ \Qorg.junit.Assert.assertFalse\E     /org.junit.jupiter.api.Assertions.assertFalse/xo
             or $line =~ s/ \Qorg.junit.Assert.*\E               /org.junit.jupiter.api.Assertions.*/xo
             or $line =~ s/ \@BeforeClass                        /\@BeforeAll/xo
-            or $line =~ s/ \@Before                             /\@BeforeEach/xo
+            or $line =~ s/ (\@Before) (\s+)                     /${1}Each${2}/xo  # avoid matching @BeforeEach, @BeforeAll
             or $line =~ s/ \@AfterClass                         /\@AfterAll/xo
-            or $line =~ s/ \@After                              /\@AfterEach/xo
+            or $line =~ s/ (\@After) (\s+)                      /${1}Each${2}/xo  # avoid matching @AfterEach, @AfterAll
         ) {
             $line_count++;
             print "$filename:\n\t$line_before -> $line";
@@ -79,11 +79,10 @@ sub work_on_lines {
                 if ($rest =~ / expected \s* = (\w+) /xo) {
                     print "$filename:\n\t$line_before: -> EXPECTED($1)\n";
                 }
-                # todo  read the test method body + wrap it !?
-                #  or maybe just leave a note about manual work?
-                #  suggestion:      1) find the first '{'
-                #                   2) find the '}' that is 4 spaces indented
-                #                   3) wrap the found text in the relevant assertion
+                # todo  read the test method body + wrap it
+                #   1) find the first '{'
+                #   2) find the '}' that is 4 spaces indented
+                #   3) wrap the found text in the relevant assertion
             }
         }
 
