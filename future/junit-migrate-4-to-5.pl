@@ -43,6 +43,7 @@ sub work_on_lines {
     my $timeout = undef;
     my $exception = undef;
     my $method_body = '';
+    my $indent = '';
 
     open my $fh, '>', $filename if defined $commit;
     foreach my $line (@$lines) {
@@ -51,18 +52,18 @@ sub work_on_lines {
         chomp $line_before;
 
         if (defined($exception)) {
-            if ($line =~ / {0,4}}/ or $line =~ /\t}/) { # end of method
+            if ($line =~ / {2,4}}/ or $line =~ /\t}/) {     # end of method
                 print $fh $method_body  if defined $commit;
-                print $fh "        });" if defined $commit;
+                print $fh $indent . $indent . "});\n" if defined $commit;
                 undef $exception;
                 $method_body = '';
             }
-            elsif ($line =~ /{$/) {
-                $method_body = "assertThrows(${exception}.class, () -> {\n";
+            elsif ($line =~ /{$/) {                         # method signature
+                $method_body = $indent . $indent . "assertThrows(${exception}.class, () -> {\n";
             }
             else {
-                $method_body .= $line; # collect method body
-                $line = '';
+                $method_body .= $indent . $line;            # collect method body
+                $line = '';                                 # to print later
             }
         }
 
@@ -90,18 +91,19 @@ sub work_on_lines {
         }
 
         # @Test parameters
-        elsif ($line =~ / \s* \@Test (.*) /xo) {
-            my $rest = $1;
+        elsif ($line =~ / (\s*) \@Test (.*) /xo) {
+            $indent = $1;
+            my $rest = $2;
             unless ($rest =~ / \s* \/\/ /xo) { # line comment
                 if ($rest =~ / timeout \s* = (\d+) /xo) {
                     print "$filename:\n\t$line_before: -> TIMEOUT($1)\n" unless defined $commit;
                     $timeout = $1;
-                    $line = "    \@Test\n";
+                    $line = $indent . "\@Test\n";
                 }
                 if ($rest =~ / expected \s* = (\w+) /xo) {
                     print "$filename:\n\t$line_before: -> EXPECTED($1)\n" unless defined $commit;
                     $exception = $1;
-                    $line = "    \@Test\n";
+                    $line = $indent . "\@Test\n";
                 }
             }
         }
