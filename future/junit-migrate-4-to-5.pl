@@ -49,16 +49,59 @@ sub work_on_lines {
     foreach my $line (@$lines) {
 
         my $line_before = $line;
-        chomp $line_before;
 
-        if (defined($exception)) {
-            if ($line =~ / {2,4}}/ or $line =~ /\t}/) {     # end of method
+        # todo
+        #  - imports if needed:
+        #       import static org.junit.jupiter.api.Assertions.assertThrows;
+        #       import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
+
+        # todo
+        # list unhandled stuff (collect in an error-list
+        #   - parameterized tests: @RunWith(@Parameterized)
+        #   - @Rule ?
+        #   - @RunWith ?
+
+        if (defined($timeout) and defined($exception)) {
+            if ($line =~ /^ {2,4}}\s*$/ or $line =~ /^\t}\s*$/) {     # end of method
+                print $fh $method_body  if defined $commit;
+                print $fh $indent . $indent . "});\n" if defined $commit;
+                print $fh $indent . $indent . "});\n" if defined $commit;
+                undef $timeout;
+                undef $exception;
+                $method_body = '';
+            }
+            elsif ($method_body eq '' and $line =~ /{\s*$/) {                         # method signature
+                $method_body = $indent . $indent . "assertTimeoutPreemptively(Duration.ofMillis(${timeout}), () -> {\n";
+                $method_body .= $indent . $indent . "assertThrows(${exception}.class, () -> {\n";
+            }
+            else {
+                $method_body .= $indent . $line;            # collect method body
+                $line = '';                                 # to print later
+            }
+        }
+        elsif (defined($timeout)) {
+            if ($line =~ /^ {2,4}}\s*$/ or $line =~ /^\t}\s*$/) {     # end of method
+                print $fh $method_body  if defined $commit;
+                print $fh $indent . $indent . "});\n" if defined $commit;
+                undef $timeout;
+                $method_body = '';
+            }
+            elsif ($method_body eq '' and $line =~ /{\s*$/) {                         # method signature
+                $method_body = $indent . $indent . "assertTimeoutPreemptively(Duration.ofMillis(${timeout}), () -> {\n";
+            }
+            else {
+                $method_body .= $indent . $line;            # collect method body
+                $line = '';                                 # to print later
+            }
+        }
+        elsif (defined($exception)) {
+            if ($line =~ /^ {2,4}}\s*$/ or $line =~ /^\t}\s*$/) {     # end of method
                 print $fh $method_body  if defined $commit;
                 print $fh $indent . $indent . "});\n" if defined $commit;
                 undef $exception;
                 $method_body = '';
             }
-            elsif ($line =~ /{$/) {                         # method signature
+            elsif ($method_body eq '' and $line =~ /{\s*$/) {                         # method signature
                 $method_body = $indent . $indent . "assertThrows(${exception}.class, () -> {\n";
             }
             else {
@@ -82,9 +125,10 @@ sub work_on_lines {
             or $line =~ s/ (\@Before) (\s+)                     /${1}Each${2}/xo  # avoid matching @BeforeEach, @BeforeAll
             or $line =~ s/ \@AfterClass                         /\@AfterAll/xo
             or $line =~ s/ (\@After) (\s+)                      /${1}Each${2}/xo  # avoid matching @AfterEach, @AfterAll
+            or $line =~ s/ \@Ignore                             /\@Disabled/xo
         ) {
             $line_count++;
-            print "$filename:\n\t$line_before -> $line" unless defined $commit;
+            print "$filename:\n\t${line_before} \t\t-> $line" unless defined $commit;
         }
         elsif ($line =~ / \Qorg.junit\E /) {
             die "This line contains a package name that I can't handle: $line";
@@ -95,17 +139,25 @@ sub work_on_lines {
             $indent = $1;
             my $rest = $2;
             unless ($rest =~ / \s* \/\/ /xo) { # line comment
-                if ($rest =~ / timeout \s* = (\d+) /xo) {
-                    print "$filename:\n\t$line_before: -> TIMEOUT($1)\n" unless defined $commit;
+                if ($rest =~ / timeout \s* = \s* (\d+) /xo) {
                     $timeout = $1;
-                    $line = $indent . "\@Test\n";
                 }
-                if ($rest =~ / expected \s* = (\w+) /xo) {
-                    print "$filename:\n\t$line_before: -> EXPECTED($1)\n" unless defined $commit;
+                if ($rest =~ / expected \s* = \s* (\w+) /xo) {
                     $exception = $1;
-                    $line = $indent . "\@Test\n";
+
+                }
+                if (defined($exception) or defined($timeout)) {
+                    print "$filename:\n\t${line_before} \t\t" unless defined $commit;
+                    if (defined($exception)) {
+                        print " -> EXPECTED($exception)" unless defined $commit;
+                    }
+                    if (defined($timeout)) {
+                        print " -> TIMEOUT($timeout)" unless defined $commit;
+                    }
+                    say "" unless defined $commit;
                 }
             }
+            $line = $indent . "\@Test\n";
         }
 
         print $fh $line if defined $commit;
