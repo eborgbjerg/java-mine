@@ -18,6 +18,14 @@ my %files_to_edit;
 
 my @source_dirs = @ARGV;
 
+my $method_end_tab    = /^\t}\s*$/o;
+my $method_end_spaces = /^ {2,4}}\s*$/o;
+my $start_brace_line  = /{\s*$/o;
+
+my $lambda_start = "() -> {\n";
+my $lambda_end = "});\n";
+
+
 use File::Find;
 sub finder {
     if (/\.java\Z/) {
@@ -51,66 +59,65 @@ sub work_on_lines {
         my $line_before = $line;
 
         # todo
-        #  - imports if needed:
+        #  - add imports if needed:
         #       import static org.junit.jupiter.api.Assertions.assertThrows;
         #       import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
         # todo
         # list unhandled stuff (collect in an error-list
         #   - parameterized tests: @RunWith(@Parameterized)
-        #   - @Rule ?
-        #   - @RunWith ?
+        #   - @Rule ?  @RunWith ?
 
-        if (defined($timeout) and defined($exception)) {
-            if ($line =~ /^ {2,4}}\s*$/ or $line =~ /^\t}\s*$/) {     # end of method
+        if (defined($timeout) and defined($exception)) { # exception + timeout
+            if ($line =~ $method_end_spaces or $line =~ $method_end_tab) {
                 print $fh $method_body  if defined $commit;
-                print $fh $indent . $indent . "});\n" if defined $commit;
-                print $fh $indent . $indent . "});\n" if defined $commit;
+                print $fh $indent . $indent . $lambda_end if defined $commit;
+                print $fh $indent . $indent . $lambda_end if defined $commit;
                 undef $timeout;
                 undef $exception;
                 $method_body = '';
             }
-            elsif ($method_body eq '' and $line =~ /{\s*$/) {                         # method signature
-                $method_body = $indent . $indent . "assertTimeoutPreemptively(Duration.ofMillis(${timeout}), () -> {\n";
-                $method_body .= $indent . $indent . "assertThrows(${exception}.class, () -> {\n";
+            elsif ($method_body eq '' and $line =~ $start_brace_line) {     # method signature
+                $method_body  = $indent . $indent . assert_timeout_start($timeout); #   "assertTimeoutPreemptively(Duration.ofMillis(${timeout}), $lambda_start";
+                $method_body .= $indent . $indent . assert_throws_start($exception); # "assertThrows(${exception}.class, $lambda_start";
             }
             else {
-                $method_body .= $indent . $line;            # collect method body
-                $line = '';                                 # to print later
+                $method_body .= $indent . $line;            # collect method body to print later
+                $line = '';
             }
         }
-        elsif (defined($timeout)) {
-            if ($line =~ /^ {2,4}}\s*$/ or $line =~ /^\t}\s*$/) {     # end of method
+        elsif (defined($timeout)) { # timeout
+            if ($line =~ $method_end_spaces or $line =~ $method_end_tab) {
                 print $fh $method_body  if defined $commit;
-                print $fh $indent . $indent . "});\n" if defined $commit;
+                print $fh $indent . $indent . $lambda_end if defined $commit;
                 undef $timeout;
                 $method_body = '';
             }
-            elsif ($method_body eq '' and $line =~ /{\s*$/) {                         # method signature
-                $method_body = $indent . $indent . "assertTimeoutPreemptively(Duration.ofMillis(${timeout}), () -> {\n";
+            elsif ($method_body eq '' and $line =~ $start_brace_line) {     # method signature
+                $method_body = $indent . $indent . assert_timeout_start($timeout); # "assertTimeoutPreemptively(Duration.ofMillis(${timeout}), $lambda_start";
             }
             else {
-                $method_body .= $indent . $line;            # collect method body
-                $line = '';                                 # to print later
+                $method_body .= $indent . $line;            # collect method body to print later
+                $line = '';
             }
         }
-        elsif (defined($exception)) {
-            if ($line =~ /^ {2,4}}\s*$/ or $line =~ /^\t}\s*$/) {     # end of method
+        elsif (defined($exception)) { # exception
+            if ($line =~ $method_end_spaces or $line =~ $method_end_tab) {
                 print $fh $method_body  if defined $commit;
-                print $fh $indent . $indent . "});\n" if defined $commit;
+                print $fh $indent . $indent . $lambda_end if defined $commit;
                 undef $exception;
                 $method_body = '';
             }
-            elsif ($method_body eq '' and $line =~ /{\s*$/) {                         # method signature
-                $method_body = $indent . $indent . "assertThrows(${exception}.class, () -> {\n";
+            elsif ($method_body eq '' and $line =~ $start_brace_line) {     # method signature
+                $method_body = $indent . $indent . assert_throws_start($exception);# "assertThrows(${exception}.class, $lambda_start";
             }
             else {
-                $method_body .= $indent . $line;            # collect method body
-                $line = '';                                 # to print later
+                $method_body .= $indent . $line;            # collect method body to print later
+                $line = '';
             }
         }
 
-        # fully qualified class names, annotation usage
+        # fully qualified class names + annotation usage
         elsif ($line =~ s/ \Qorg.junit.BeforeClass\E            /org.junit.jupiter.api.BeforeAll/xo
             or $line =~ s/ \Qorg.junit.Before\E                 /org.junit.jupiter.api.BeforeEach/xo
             or $line =~ s/ \Qorg.junit.AfterClass\E             /org.junit.jupiter.api.AfterAll/xo
@@ -134,8 +141,8 @@ sub work_on_lines {
             die "This line contains a package name that I can't handle: $line";
         }
 
-        # @Test parameters
         elsif ($line =~ / (\s*) \@Test (.*) /xo) {
+            # Handle @Test parameters
             $indent = $1;
             my $rest = $2;
             unless ($rest =~ / \s* \/\/ /xo) { # line comment
@@ -149,10 +156,10 @@ sub work_on_lines {
                 if (defined($exception) or defined($timeout)) {
                     print "$filename:\n\t${line_before} \t\t" unless defined $commit;
                     if (defined($exception)) {
-                        print " -> EXPECTED($exception)" unless defined $commit;
+                        print " -> expect the exception class $exception" unless defined $commit;
                     }
                     if (defined($timeout)) {
-                        print " -> TIMEOUT($timeout)" unless defined $commit;
+                        print " -> timeout by $timeout milliseconds" unless defined $commit;
                     }
                     say "" unless defined $commit;
                 }
@@ -164,4 +171,13 @@ sub work_on_lines {
     }
     close $fh if defined $commit;
     $files_to_edit{$filename} = 1 if $line_count > 0;
+}
+
+
+sub assert_throws_start {
+    return "assertThrows($_.class, $lambda_start";
+}
+
+sub assert_timeout_start {
+    "assertTimeoutPreemptively(Duration.ofMillis($_), $lambda_start";
 }
