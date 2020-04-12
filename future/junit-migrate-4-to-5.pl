@@ -18,9 +18,9 @@ my %files_to_edit;
 
 my @source_dirs = @ARGV;
 
-my $method_end_tab    = /^\t}\s*$/o;
-my $method_end_spaces = /^ {2,4}}\s*$/o;
-my $start_brace_line  = /{\s*$/o;
+my $method_end_tab    = qr/^\t}\s*$/;
+my $method_end_spaces = qr/^ {2,4}}\s*$/;
+my $start_brace_line  = qr/{\s*$/;
 
 my $lambda_start = "() -> {\n";
 my $lambda_end = "});\n";
@@ -67,6 +67,10 @@ sub work_on_lines {
         # list unhandled stuff (collect in an error-list
         #   - parameterized tests: @RunWith(@Parameterized)
         #   - @Rule ?  @RunWith ?
+        # import org.junit.runner.RunWith;
+        # import org.junit.runners.Parameterized;
+        # import org.junit.runners.Parameterized.Parameters;
+
 
         if (defined($timeout) and defined($exception)) { # exception + timeout
             if ($line =~ $method_end_spaces or $line =~ $method_end_tab) {
@@ -78,8 +82,8 @@ sub work_on_lines {
                 $method_body = '';
             }
             elsif ($method_body eq '' and $line =~ $start_brace_line) {     # method signature
-                $method_body  = $indent . $indent . assert_timeout_start($timeout); #   "assertTimeoutPreemptively(Duration.ofMillis(${timeout}), $lambda_start";
-                $method_body .= $indent . $indent . assert_throws_start($exception); # "assertThrows(${exception}.class, $lambda_start";
+                $method_body  = $indent . $indent . assert_timeout_start($timeout);
+                $method_body .= $indent . $indent . assert_throws_start($exception);
             }
             else {
                 $method_body .= $indent . $line;            # collect method body to print later
@@ -91,10 +95,11 @@ sub work_on_lines {
                 print $fh $method_body  if defined $commit;
                 print $fh $indent . $indent . $lambda_end if defined $commit;
                 undef $timeout;
+                undef $exception;
                 $method_body = '';
             }
             elsif ($method_body eq '' and $line =~ $start_brace_line) {     # method signature
-                $method_body = $indent . $indent . assert_timeout_start($timeout); # "assertTimeoutPreemptively(Duration.ofMillis(${timeout}), $lambda_start";
+                $method_body = $indent . $indent . assert_timeout_start($timeout);
             }
             else {
                 $method_body .= $indent . $line;            # collect method body to print later
@@ -105,11 +110,12 @@ sub work_on_lines {
             if ($line =~ $method_end_spaces or $line =~ $method_end_tab) {
                 print $fh $method_body  if defined $commit;
                 print $fh $indent . $indent . $lambda_end if defined $commit;
+                undef $timeout;
                 undef $exception;
                 $method_body = '';
             }
             elsif ($method_body eq '' and $line =~ $start_brace_line) {     # method signature
-                $method_body = $indent . $indent . assert_throws_start($exception);# "assertThrows(${exception}.class, $lambda_start";
+                $method_body = $indent . $indent . assert_throws_start($exception);
             }
             else {
                 $method_body .= $indent . $line;            # collect method body to print later
@@ -151,7 +157,6 @@ sub work_on_lines {
                 }
                 if ($rest =~ / expected \s* = \s* (\w+) /xo) {
                     $exception = $1;
-
                 }
                 if (defined($exception) or defined($timeout)) {
                     print "$filename:\n\t${line_before} \t\t" unless defined $commit;
@@ -175,9 +180,9 @@ sub work_on_lines {
 
 
 sub assert_throws_start {
-    return "assertThrows($_.class, $lambda_start";
+    return "assertThrows($_[0].class, $lambda_start";
 }
 
 sub assert_timeout_start {
-    "assertTimeoutPreemptively(Duration.ofMillis($_), $lambda_start";
+    "assertTimeoutPreemptively(Duration.ofMillis($_[0]), $lambda_start";
 }
