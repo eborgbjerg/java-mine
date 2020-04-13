@@ -59,6 +59,9 @@ sub work_on_lines {
         my $line_before = $line;
 
         # todo
+        # - remove public modifier from @Test methods and (optionally) from class name
+
+        # todo
         #  - add imports if needed:
         #       import static org.junit.jupiter.api.Assertions.assertThrows;
         #       import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
